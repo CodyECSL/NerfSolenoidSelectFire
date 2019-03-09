@@ -1,5 +1,3 @@
-
-
 /*----------------------------------------------------------------------*
  * Nerf Solenoid Select Fire                        			              *
  *                                                                      *
@@ -13,13 +11,19 @@
  *----------------------------------------------------------------------*/
 
 #include <JC_Button.h>																											//library to deal with buttons easier
+#include <SSD1306.h>
+
+#include <splash.h>
 
 //pins
 #define IR_GATE_PIN 0																											//analog input
+#define DART_COUNTER_SWITCH_PIN 11                                         //digital input
+
 #define TOGGLE_FIRE_MODES_BTN_PIN 2                                       //digital inpit
-#define TRIGGER_PIN 7                                                    //digital input
-#define DART_COUNTER_SWITCH_PIN 11   																			//digital input
-#define MOTOR_OUTPUT_PIN 12                                                //digital output
+#define TRIGGER_PIN 3                                                    //digital input
+#define MOTOR_OUTPUT_PIN 4                                                //digital output
+#define SDA_PIN 5
+#define SCL_PIN 6
 
 //for buttons/switches
 #define PULLUP true        																								//internal pullup, so we dont need to wire resistor
@@ -43,6 +47,9 @@ Button trigger (TRIGGER_PIN, PULLUP, INVERT, DEBOUNCE_MS);														//trigge
 Button dartCountingSwitch (DART_COUNTER_SWITCH_PIN, PULLUP, INVERT, DEBOUNCE_MS);			//dart counting button, using the library
 Button toggleFireModesBtn (TOGGLE_FIRE_MODES_BTN_PIN, PULLUP, INVERT, DEBOUNCE_MS);		//toggle fire modes button, using the librarys
 
+// Setup Display
+SSD1306 display(0x3c, SDA_PIN, SCL_PIN);
+
 void runMotor() {
   digitalWrite(MOTOR_OUTPUT_PIN, HIGH);
 }
@@ -61,17 +68,25 @@ void fireDart() {
 }
 
 void setup () {   
-    Serial.begin(9600);
-    pinMode(MOTOR_OUTPUT_PIN, OUTPUT);																		//set motor output pin to an output pin
-    stopMotor();        													//make sure motor is off
-    resetDartsFired();																										//reset all dart firing values so they dont get messed up later
+  Serial.begin(9600);
+
+    // Initialising the UI will init the display too.
+  display.init();
+
+  display.flipScreenVertically();
+  display.setFont(ArialMT_Plain_16);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  
+  pinMode(MOTOR_OUTPUT_PIN, OUTPUT);																		//set motor output pin to an output pin
+  stopMotor();        													//make sure motor is off
+  resetDartsFired();																										//reset all dart firing values so they dont get messed up later
 }
 
 void loop () {
-    toggleFireModes();																										//constantly check for changes in firemodes
+  toggleFireModes();																										//constantly check for changes in firemodes
 //    fire();																																//constantly check if dart is fired
 //    checkForDartsFired();																									//do stuff if dart is fired
-    selectFire();																													//do fancy select-fire stuff
+  selectFire();																													//do fancy select-fire stuff
 }
 
 //switch between the various modes
@@ -79,8 +94,8 @@ void toggleFireModes () {
 	toggleFireModesBtn.read();																							//read button
 	if (toggleFireModesBtn.wasPressed()) {																	//check if it was pressed
 		fireMode = ((fireMode == 3) ? 0 : fireMode + 1);    									//increment fireMode
-    Serial.print("Firemode: ");
-    Serial.println(fireMode);
+    //Serial.print("Firemode: ");
+    Serial.println("Firemode: " + String(fireMode));
 	  resetDartsFired();																										//reset darts fired stuff so it doesn't get messed up later
 	}
 }
@@ -116,23 +131,23 @@ void fireNonAutoDarts () {
 
 //do all the fancy select fire stuff
 void selectFire () {
-    trigger.read();																												//read trigger
-    if (!trigger.isPressed()) {      																			//check of trigger is pressed
-        if (fireMode == SAFETY) {       																	//if in safety mode, turn off motor
-            stopMotor();													
-        } else if (fireMode == SINGLE_FIRE || fireMode == BURST_FIRE) {    //if in burst fire or single shot mode
-            fireNonAutoDarts();                               //allow for darts to be fired, handled elsewhere
-        } else if (fireMode == FULL_AUTO) {     													//if full auto turn on motor
-            fireDart();													
-        }
-    } else if (!trigger.wasPressed()) {    																//if trigger isn't pressed
-        if (fireMode == FULL_AUTO || fireMode == SAFETY) {								//if firemode is fullauto or safety, turn off motor
-            stopMotor();													
-        } else if ( !isCheckingForDartsFired 															//if all darts fired
-         && (fireMode == SINGLE_FIRE || fireMode == BURST_FIRE) ) {     	//and in burstfire 
-        	resetDartsFired();																							//reset darts fired stuff
-        }		
-    }
+  trigger.read();																												//read trigger
+  if (!trigger.isPressed()) {      																			//check of trigger is pressed
+      if (fireMode == SAFETY) {       																	//if in safety mode, turn off motor
+          stopMotor();													
+      } else if (fireMode == SINGLE_FIRE || fireMode == BURST_FIRE) {    //if in burst fire or single shot mode
+          fireNonAutoDarts();                               //allow for darts to be fired, handled elsewhere
+      } else if (fireMode == FULL_AUTO) {     													//if full auto turn on motor
+          fireDart();													
+      }
+  } else if (!trigger.wasPressed()) {    																//if trigger isn't pressed
+      if (fireMode == FULL_AUTO || fireMode == SAFETY) {								//if firemode is fullauto or safety, turn off motor
+          stopMotor();													
+      } else if ( !isCheckingForDartsFired 															//if all darts fired
+       && (fireMode == SINGLE_FIRE || fireMode == BURST_FIRE) ) {     	//and in burstfire 
+      	resetDartsFired();																							//reset darts fired stuff
+      }		
+  }
 }
 
 void resetDartsFired () {
@@ -156,7 +171,7 @@ int numberOfDartsToFire () {
 }
 
 // This will be used for an Ammo Counter and Display in the future
-string nameOfFireMode () {
+String nameOfFireMode () {
   switch (fireMode)
   {
     case SAFETY:
@@ -170,3 +185,11 @@ string nameOfFireMode () {
   }
 }
 
+void updateDisplay() {
+  display.clear();
+  display.setTextAlignment(TEXT_ALIGN_CENTER); //// TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER_BOTH
+  display.drawString("Dart Counter");
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.drawString(0, 16, "Darts Fired: " + String(dartsFired)); 
+  display.drawString(0, 32, "Fire Mode: " + String(nameOfFireMode())); 
+}
