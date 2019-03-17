@@ -12,21 +12,16 @@
 
 #include <JC_Button.h>																											//library to deal with buttons easier
 #include <Adafruit_SSD1306.h>
-#include <splash.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SPITFT.h>
-#include <Adafruit_SPITFT_Macros.h>
-#include <gfxfont.h>
-#include <SPI.h>
-#include <Wire.h>
+//#include <Adafruit_GFX.h>
+//#include <gfxfont.h>
 #include "nerfLogo.h"
 
 //pins
 #define TOGGLE_FIRE_MODES_BTN_PIN 6                                       //digital inpit
 #define TRIGGER_PIN 7                                                    //digital input
 #define MOTOR_OUTPUT_PIN 8                                                //digital output
-#define SDA_PIN 4
-#define SCL_PIN 5
+#define SDA_PIN A4                                                        // This is a placeholder as a note.  These defined pins don't get used in code.
+#define SCL_PIN A5                                                        // This is a placeholder as a note.  These defined pins don't get used in code.
 
 //for buttons/switches
 #define PULLUP true        																								//internal pullup, so we dont need to wire resistor
@@ -43,7 +38,7 @@
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define OLED_RESET     3 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 byte fireMode = 0;   																											//keep track of fire modes.
@@ -66,14 +61,14 @@ void setup () {
   //http://javl.github.io/image2cpp/
   display.drawBitmap(20,17, nerfLogo, 90, 44, 1);
   display.display();
-  delay(2000);
+  delay(1000);
   display.clearDisplay();
+  displayFullScreenUpdate();
 }
 
 void loop () {
   toggleFireModes();																										//constantly check for changes in firemodes
   processTriggerAction();																					      //Process any trigger actions
-  updateDisplay();
 }
 
 //Toggle between Fire Modes
@@ -84,6 +79,8 @@ void toggleFireModes () {
     //Serial.print("Firemode: ");
     Serial.println("Firemode: " + String(fireMode));
     resetDartsFired();																										//reset darts fired stuff so it doesn't get messed up later
+    displayUpdateSelectFireStatus();
+    displayUpdateAmmoCount();
   }
 }
 
@@ -91,17 +88,18 @@ void toggleFireModes () {
 void processTriggerAction () {
   trigger.read();                                                        //read trigger
   if (!trigger.isPressed()) {                                           //check of trigger is pressed
-    if (fireMode == SAFETY) {                                         //if in safety mode, turn off motor
-      stopMotor();
+    if (fireMode == FULL_AUTO) {                               //if full auto turn on motor
+      fireDart();
+      processTriggerAction();
     } else if (fireMode == SINGLE_FIRE || fireMode == BURST_FIRE) {    //if in burst fire or single shot mode
       fireNonAutoDarts();                               //allow for darts to be fired, handled elsewhere
-    } else if (fireMode == FULL_AUTO) {                               //if full auto turn on motor
-      fireDart();
+    } else if (fireMode == SAFETY) {                                         //if in safety mode, turn off motor
+      stopMotor();
     }
   } else if (!trigger.wasPressed()) {                                   //if trigger isn't pressed
     if (fireMode == FULL_AUTO || fireMode == SAFETY) {                //if firemode is fullauto or safety, turn off motor
       stopMotor();
-//      updateDisplay();
+//      displayFullScreenUpdate();
     } else if ( !isCheckingForDartsFired                              //if all darts fired
                 && (fireMode == SINGLE_FIRE || fireMode == BURST_FIRE) ) {      //and in burstfire
       resetDartsFired();                                              //reset darts fired stuff
@@ -125,7 +123,7 @@ void fireDart() {
   Serial.println("FiredDart");
   dartsFired++;
   totalDartsFired++;
-//  updateDisplay();
+  displayUpdateAmmoCount();
 }
 
 void fireNonAutoDarts () {
@@ -156,46 +154,71 @@ int numberOfDartsToFire () {
 }
 
 // This will be used for an Ammo Counter and Display in the future
-String nameOfFireMode () {
-  switch (fireMode)
+String nameOfFireMode (int i) {
+  switch (i)
   {
-    case SAFETY:
-      return "SAFETY";
-    case SINGLE_FIRE:
-      return "SINGLE";
-    case BURST_FIRE:
-      return "BURST";
-    case FULL_AUTO:
+    case 0:
+      return "SAFE";
+    case 1:
+      return "SEMI";
+    case 2:
+      return "BRST";
+    case 3:
       return "FULL";
   }
 }
 
-void updateDisplay() {
-//  display.clear();
-//  display.setFont(ArialMT_Plain_16);
-//  display.setTextAlignment(TEXT_ALIGN_CENTER); //// TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER_BOTH
-//  display.drawString(0, 0, "Dart Counter");
-//  display.setTextAlignment(TEXT_ALIGN_LEFT);
-//  display.drawString(0, 16, "Darts Fired: " + String(dartsFired));
-//  display.drawString(0, 32, "Fire Mode: " + String(nameOfFireMode()));
-//  display.display();
+void displayFullScreenUpdate() {
+  displayUpdateBlasterName();
+  displayUpdateAmmoCount();
+  displayUpdateSelectFireStatus();
+}
 
+void displayUpdateBlasterName () {
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.clearDisplay();
   display.setCursor(30,0);
   display.println("Meaker MK16");
+  display.display();
+}
+
+void displayUpdateAmmoCount () {
+  display.setTextColor(WHITE);
   display.setTextSize(4);
+  display.fillRect(0, 16, 128, 32, BLACK);
   if (numberOfDartsToFire () == 0) {
-    display.setCursor(30,20);
+    display.setCursor(30,16);
     display.println("---");
   } else {
-    display.setCursor(55,20);
+    display.setCursor(55,16);
     if (totalDartsFired > 9)
-      display.setCursor(40,20);
+      display.setCursor(40,16);
     display.println(totalDartsFired);
   }
-  display.setTextSize(1);
-  display.println("Fire Mode: " + String(nameOfFireMode()));
   display.display();
+}
+
+void displayUpdateSelectFireStatus () {
+  display.setTextSize(1);
+  
+  int cursorPositionX = 4;
+  int cursorPositionY = 56;
+
+  display.fillRect(0, cursorPositionY -1, 128, 9, WHITE);
+  display.fillRect(0, cursorPositionY, 128, 7, BLACK);
+
+  for (int i = 0; i < 4; i++) {
+    display.setCursor(cursorPositionX, cursorPositionY);
+    if (i == fireMode){
+      display.fillRect(cursorPositionX - 5, cursorPositionY - 1, 32, 9, WHITE);
+      display.setTextColor(BLACK);
+    } else {
+      display.setTextColor(WHITE);
+    }
+    display.print(String(nameOfFireMode(i)));
+    cursorPositionX += 32;
+  }
+  display.display();
+  Serial.println("Draw: SelectFireStatus");
 }
